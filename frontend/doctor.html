@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>لوحة تحكم الدكتور - نظام تسجيل الحضور</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./css/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <!-- Header مع رابط العودة -->
+      <div class="page-header">
+        <div class="header-content">
+          <a href="index.html" class="back-link">
+            <span class="back-icon">←</span>
+            العودة للصفحة الرئيسية
+          </a>
+          <h1 class="page-title">لوحة تحكم الدكتور</h1>
+        </div>
+      </div>
+
+      <!-- لوحة تحكم الدكتور -->
+      <div id="professorDashboard">
+        <div class="header">
+          <div class="user-info">
+            <div class="avatar" id="profAvatar"></div>
+            <div>
+              <h3 id="profName" style="margin-bottom: 5px"></h3>
+              <p style="color: #666; font-size: 14px">دكتور</p>
+            </div>
+          </div>
+          <button
+            onclick="logout()"
+            class="btn-danger"
+            style="width: auto; padding: 10px 20px"
+          >
+            تسجيل الخروج
+          </button>
+        </div>
+
+        <div class="tabs">
+          <button class="tab active" onclick="showProfTab('create')">
+            إنشاء جلسة
+          </button>
+          <button class="tab" onclick="showProfTab('active')">
+            الجلسات النشطة
+          </button>
+          <button class="tab" onclick="showProfTab('scan')">
+            مسح QR للطلاب
+          </button>
+        </div>
+
+        <!-- تبويب إنشاء جلسة -->
+        <div id="createSessionTab" class="card">
+          <h2>إنشاء جلسة جديدة</h2>
+          <form id="createSessionForm">
+            <div class="form-group">
+              <label>اسم المادة</label>
+              <input
+                type="text"
+                id="subjectName"
+                required
+                placeholder="مثال: برمجة 1"
+              />
+            </div>
+            <div class="form-group">
+              <label>مدة الجلسة (بالدقائق)</label>
+              <input
+                type="number"
+                id="duration"
+                value="60"
+                min="5"
+                max="180"
+                required
+              />
+            </div>
+            <button type="submit">إنشاء الجلسة وتوليد QR Code</button>
+          </form>
+
+          <div id="qrDisplay" class="qr-container hidden">
+            <h3>✅ تم إنشاء الجلسة بنجاح</h3>
+            <div class="qr-display-card">
+              <div id="qrcode"></div>
+              <p class="session-code-text">
+                كود الجلسة:
+                <span class="session-code" id="displaySessionCode"></span>
+              </p>
+              <p class="qr-instruction">
+                📱 يمكن للطلاب مسح هذا الكود لتسجيل الحضور
+              </p>
+              <hr style="margin: 20px 0; border: 1px solid #e2e8f0;">
+              <div style="background: #f7fafc; padding: 15px; border-radius: 8px; text-align: center;">
+                <p style="color: #666; margin-bottom: 10px; font-size: 14px;">📋 يمكن للطالب أيضاً إدخال هذا الكود يدويًا:</p>
+                <div style="background: white; padding: 10px; border-radius: 6px; border: 2px dashed #cbd5e0; font-family: monospace; font-size: 18px; font-weight: bold; color: #2d3748; letter-spacing: 2px; direction: ltr;">
+                  <span id="displaySessionCodeText"></span>
+                </div>
+                <button 
+                  onclick="copySessionCode()"
+                  style="margin-top: 10px; background: #667eea; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px;"
+                >
+                  📋 نسخ الكود
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- تبويب الجلسات النشطة -->
+        <div id="activeSessionsTab" class="card hidden">
+          <h2>الجلسات النشطة</h2>
+          <button
+            onclick="loadActiveSessions()"
+            class="btn-secondary"
+            style="width: auto; padding: 10px 20px; margin-bottom: 20px"
+          >
+            تحديث
+          </button>
+          <div id="sessionsList"></div>
+        </div>
+
+        <!-- تبويب مسح QR للطلاب -->
+        <div id="scanTab" class="card hidden">
+          <h2>📷 مسح QR Code للطلاب</h2>
+          <p style="color: #666; margin-bottom: 20px">
+            يمكنك مسح QR Code الخاص بالطلاب لتسجيل حضورهم يدوياً
+          </p>
+
+          <div class="form-group">
+            <label>اختر الجلسة النشطة:</label>
+            <select id="activeSessionSelect" required>
+              <option value="">اختر جلسة...</option>
+            </select>
+          </div>
+
+          <div id="scanMessage"></div>
+          <div class="scanner-container">
+            <div id="reader"></div>
+          </div>
+          <button
+            onclick="stopScanner()"
+            class="btn-secondary"
+            style="margin-top: 15px"
+          >
+            إيقاف الماسح
+          </button>
+          <button onclick="startScanner()" style="margin-top: 10px">
+            تشغيل الماسح
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- المكتبات الخارجية -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="./js/shared.js"></script>
+    <script src="./js/doctor.js"></script>
+  </body>
+</html>

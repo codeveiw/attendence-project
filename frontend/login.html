@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>تسجيل الدخول - نظام تسجيل الحضور</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./css/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <!-- صفحة تسجيل الدخول -->
+      <div class="login-container">
+        <div class="card">
+          <h1 style="text-align: center">نظام تسجيل الحضور</h1>
+          <form id="loginForm">
+            <div class="form-group">
+              <label>اسم المستخدم</label>
+              <input
+                type="text"
+                id="username"
+                required
+                placeholder="أدخل اسم المستخدم"
+                autocomplete="username"
+              />
+            </div>
+            <div class="form-group">
+              <label>كلمة المرور</label>
+              <input
+                type="password"
+                id="password"
+                required
+                placeholder="أدخل كلمة المرور"
+                autocomplete="current-password"
+              />
+            </div>
+            <button type="submit" id="submitBtn">تسجيل الدخول</button>
+          </form>
+          <div id="loginMessage"></div>
+          <div class="demo-info">
+            <strong>📝 حسابات تجريبية:</strong><br /><br />
+
+            <strong>👑 المسؤول:</strong><br />
+            admin / admin123<br /><br />
+
+            <strong>🔬 الدكاترة:</strong><br />
+            prof1 / 123456<br />
+            prof2 / 123456<br />
+            prof3 / 123456<br /><br />
+
+            <strong>🎓 الطلاب:</strong><br />
+            student1 / 123456<br />
+            student2 / 123456<br />
+            student3 / 123456
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- المكتبات الخارجية -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="./js/shared.js"></script>
+    <script src="./js/login.js"></script>
+  </body>
+</html>
