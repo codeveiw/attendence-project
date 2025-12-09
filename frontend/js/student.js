@@ -7,9 +7,9 @@ let studentUser = null;
 let studentScanner = null;
 
 // انتظر حتى يتم تحميل الصفحة
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
   console.log('📄 تم تحميل DOM للطالب');
-  
+
   studentUser = checkAuth();
   console.log('👤 المستخدم:', studentUser);
 
@@ -36,33 +36,40 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // التبديل بين التبويبات
-function showStudentTab(tabName) {
+// التبديل بين تبويبات الطالب
+function showStudentTab(tabName, event) {
   console.log('🔄 التبديل إلى تبويب:', tabName);
-  
+
   try {
+    // استخدام event الممرر أو البحث عن global event
+    const evt = event || window.event;
+    const target = evt ? (evt.currentTarget || evt.target) : null;
+
     // إخفاء جميع التبويبات
     document.getElementById('scanTab').classList.add('hidden');
     document.getElementById('recordsTab').classList.add('hidden');
     document.getElementById('myqrTab').classList.add('hidden');
-    
+
     // إزالة الحالة النشطة من جميع الأزرار
     document.querySelectorAll('.tab').forEach(tab => {
       tab.classList.remove('active');
     });
-    
+
+    // تفعيل الزر المضغوط
+    if (target) {
+      target.classList.add('active');
+    }
+
     // عرض التبويب المحدد
     if (tabName === 'scan') {
       document.getElementById('scanTab').classList.remove('hidden');
-      document.querySelectorAll('.tab')[0].classList.add('active');
       console.log('✅ تم عرض تبويب المسح');
     } else if (tabName === 'records') {
       document.getElementById('recordsTab').classList.remove('hidden');
-      document.querySelectorAll('.tab')[1].classList.add('active');
       console.log('✅ تم عرض تبويب السجل');
       loadAttendanceRecords();
     } else if (tabName === 'myqr') {
       document.getElementById('myqrTab').classList.remove('hidden');
-      document.querySelectorAll('.tab')[2].classList.add('active');
       console.log('✅ تم عرض تبويب QR الخاص بي');
       displayMyQRCode();
     }
@@ -74,14 +81,14 @@ function showStudentTab(tabName) {
 // تشغيل الماسح الضوئي
 async function startScanner() {
   console.log('📷 تشغيل الماسح الضوئي...');
-  
+
   if (studentScanner) {
     console.log('⚠️ الماسح يعمل بالفعل، إيقافه أولاً');
     await stopScanner();
   }
-  
+
   studentScanner = new Html5Qrcode("reader");
-  
+
   try {
     await studentScanner.start(
       { facingMode: "environment" },
@@ -93,19 +100,19 @@ async function startScanner() {
         console.log('✅ تم مسح QR Code:', decodedText);
         // إيقاف الماسح مؤقتاً
         await stopScanner();
-        
+
         // تسجيل الحضور
         try {
           const data = await apiRequest('/attendance/record', 'POST', {
             session_code: decodedText
           });
-          
+
           console.log('✅ تم تسجيل الحضور:', data);
           showMessage('scanMessage', data.message, 'success');
-          
+
           // إعادة تشغيل الماسح بعد 3 ثوانٍ
           setTimeout(() => startScanner(), 3000);
-          
+
         } catch (error) {
           console.error('❌ خطأ في تسجيل الحضور:', error);
           showMessage('scanMessage', error.message, 'error');
@@ -113,10 +120,10 @@ async function startScanner() {
         }
       }
     );
-    
+
     console.log('✅ تم تشغيل الماسح');
     showMessage('scanMessage', '📷 الماسح الضوئي يعمل الآن... قم بمسح QR Code للجلسة', 'success');
-    
+
   } catch (error) {
     console.error('Scanner error:', error);
     showMessage('scanMessage', '❌ فشل تشغيل الماسح الضوئي. تأكد من السماح بالوصول للكاميرا', 'error');
@@ -140,15 +147,15 @@ async function stopScanner() {
 // تحميل سجل الحضور
 async function loadAttendanceRecords() {
   console.log('📊 تحميل سجل الحضور...');
-  
+
   try {
     const data = await apiRequest('/attendance/my-records');
     console.log('📥 البيانات المستلمة:', data);
-    
+
     // عرض الإحصائيات
     const stats = data.statistics;
     const statsGrid = document.getElementById('statsGrid');
-    
+
     if (statsGrid) {
       statsGrid.innerHTML = `
         <div class="stat-card">
@@ -169,7 +176,7 @@ async function loadAttendanceRecords() {
         </div>
       `;
     }
-    
+
     // عرض تحذير إذا لزم الأمر
     const warningBox = document.getElementById('warningBox');
     if (warningBox) {
@@ -191,10 +198,10 @@ async function loadAttendanceRecords() {
         warningBox.style.display = 'none';
       }
     }
-    
+
     // عرض السجلات
     const recordsDiv = document.getElementById('attendanceRecords');
-    
+
     if (recordsDiv) {
       if (data.records.length === 0) {
         recordsDiv.innerHTML = '<p style="text-align: center; color: #718096;">لا توجد سجلات حضور بعد</p>';
@@ -210,9 +217,9 @@ async function loadAttendanceRecords() {
         `).join('');
       }
     }
-    
+
     console.log('✅ تم تحميل سجل الحضور بنجاح');
-    
+
   } catch (error) {
     console.error('❌ خطأ في تحميل سجل الحضور:', error);
     showMessage('scanMessage', error.message, 'error');
@@ -222,20 +229,20 @@ async function loadAttendanceRecords() {
 // عرض QR Code الخاص بالطالب
 function displayMyQRCode() {
   console.log('🔲 عرض QR Code الخاص بالطالب...');
-  
+
   const qrCodeDiv = document.getElementById('myQrcode');
-  
+
   if (!qrCodeDiv) {
     console.error('❌ لم يتم العثور على عنصر myQrcode');
     return;
   }
-  
+
   // مسح QR Code القديم
   qrCodeDiv.innerHTML = '';
-  
+
   // كود الطالب
   const studentCode = `STUDENT_${studentUser.id}`;
-  
+
   // إنشاء QR Code
   new QRCode(qrCodeDiv, {
     text: studentCode,
@@ -244,43 +251,43 @@ function displayMyQRCode() {
     colorDark: '#667eea',
     colorLight: '#ffffff'
   });
-  
+
   // عرض كود الطالب
   const codeEl = document.getElementById('myStudentCode');
   if (codeEl) {
     codeEl.textContent = studentCode;
   }
-  
+
   console.log('✅ تم عرض QR Code');
 }
 
 // تسجيل الحضور بإدخال يدوي لكود الجلسة
 async function submitManualCode() {
   console.log('📝 محاولة تسجيل حضور بالكود اليدوي');
-  
+
   const sessionCode = document.getElementById('manualSessionCode').value.trim();
-  
+
   console.log('📝 كود الجلسة المدخل:', sessionCode);
-  
+
   if (!sessionCode) {
     console.warn('⚠️ كود الجلسة فارغ');
     showMessage('manualCodeMessage', '❌ يرجى إدخال كود الجلسة', 'error');
     return;
   }
-  
+
   try {
     console.log('📡 إرسال الطلب للخادم...');
     const data = await apiRequest('/attendance/record', 'POST', {
       session_code: sessionCode
     });
-    
+
     console.log('✅ تم تسجيل الحضور بنجاح:', data);
     showMessage('manualCodeMessage', data.message, 'success');
     document.getElementById('manualSessionCode').value = '';
-    
+
     // تحديث سجل الحضور بعد ثانية
     setTimeout(() => loadAttendanceRecords(), 1000);
-    
+
   } catch (error) {
     console.error('❌ خطأ في تسجيل الحضور:', error);
     showMessage('manualCodeMessage', error.message, 'error');

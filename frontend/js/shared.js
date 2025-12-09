@@ -3,7 +3,12 @@
 console.log('✅ تم تحميل shared.js');
 
 // إعدادات النظام
-const API_URL = "http://127.0.0.1:5000/api";
+//  const API_URL = "http://127.0.0.1:5000/api";
+// const API_URL = "http://192.168.1.2:5000/api";
+// const API_URL = "http://192.168.43.63:5000/api";
+// const API_URL = "https://merrilee-rhetorical-kristan.ngrok-free.dev/api";
+const API_URL = "https://merrilee-rhetorical-kristan.ngrok-free.dev/api";
+
 
 console.log('🔧 الإعدادات:', {
   API_URL

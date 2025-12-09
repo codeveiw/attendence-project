@@ -7,6 +7,7 @@ import secrets
 import hashlib
 from functools import wraps
 
+
 app = Flask(__name__, static_folder='../frontend', static_url_path='')
 CORS(app)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
@@ -663,4 +664,10 @@ def index():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    # app.run(debug=True, port=5000)
+    
+    
+         app.run(debug=True, host="0.0.0.0", port=5000)
+
+    
+   

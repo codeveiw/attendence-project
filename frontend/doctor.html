@@ -30,7 +30,7 @@
             <div class="avatar" id="profAvatar"></div>
             <div>
               <h3 id="profName" style="margin-bottom: 5px"></h3>
-              <p style="color: #666; font-size: 14px">دكتور</p>
+              <p style="color: #fff; font-size: 14px">دكتور</p>
             </div>
           </div>
           <button
@@ -43,13 +43,13 @@
         </div>
 
         <div class="tabs">
-          <button class="tab active" onclick="showProfTab('create')">
+          <button class="tab active" onclick="showProfTab('create', event)">
             إنشاء جلسة
           </button>
-          <button class="tab" onclick="showProfTab('active')">
+          <button class="tab" onclick="showProfTab('active', event)">
             الجلسات النشطة
           </button>
-          <button class="tab" onclick="showProfTab('scan')">
+          <button class="tab" onclick="showProfTab('scan', event)">
             مسح QR للطلاب
           </button>
         </div>

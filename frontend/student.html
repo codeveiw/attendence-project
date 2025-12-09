@@ -1,143 +1,126 @@
 <!DOCTYPE html>
 <html dir="rtl" lang="ar">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>لوحة تحكم الطالب - نظام تسجيل الحضور</title>
-    <link
-      href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="./css/style.css" />
-  </head>
-  <body>
-    <div class="container">
-      <!-- Header مع رابط العودة -->
-      <div class="page-header">
-        <div class="header-content">
-          <a href="index.html" class="back-link">
-            <span class="back-icon">←</span>
-            العودة للصفحة الرئيسية
-          </a>
-          <h1 class="page-title">لوحة تحكم الطالب</h1>
-        </div>
-      </div>
 
-      <!-- لوحة تحكم الطالب -->
-      <div id="studentDashboard">
-        <div class="header">
-          <div class="user-info">
-            <div class="avatar" id="studentAvatar"></div>
-            <div>
-              <h3 id="studentName" style="margin-bottom: 5px"></h3>
-              <p style="color: #666; font-size: 14px">طالب</p>
-            </div>
-          </div>
-          <button
-            onclick="logout()"
-            class="btn-danger"
-            style="width: auto; padding: 10px 20px"
-          >
-            تسجيل الخروج
-          </button>
-        </div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>لوحة تحكم الطالب - نظام تسجيل الحضور</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
 
-        <div class="tabs">
-          <button class="tab active" onclick="showStudentTab('scan')">
-            مسح QR
-          </button>
-          <button class="tab" onclick="showStudentTab('records')">
-            سجل الحضور
-          </button>
-          <button class="tab" onclick="showStudentTab('myqr')">
-            QR الخاص بي
-          </button>
-        </div>
-
-        <!-- تبويب مسح QR -->
-        <div id="scanTab" class="card">
-          <h2>📷 مسح QR Code</h2>
-          <div id="scanMessage"></div>
-          <div class="scanner-container">
-            <div id="reader"></div>
-          </div>
-          <button
-            onclick="stopScanner()"
-            class="btn-secondary"
-            style="margin-top: 15px"
-          >
-            إيقاف الماسح
-          </button>
-          <button onclick="startScanner()" style="margin-top: 10px">
-            تشغيل الماسح
-          </button>
-
-          <!-- إدخال يدوي لكود الجلسة -->
-          <div style="margin-top: 20px; border-top: 2px solid #e2e8f0; padding-top: 20px;">
-            <h3>📝 إدخال كود الجلسة يدويًا</h3>
-            <p style="color: #666; margin-bottom: 15px;">إذا لم تتمكن من مسح QR Code، يمكنك إدخال كود الجلسة مباشرة</p>
-            <div class="form-group">
-              <label for="manualSessionCode">كود الجلسة:</label>
-              <input
-                type="text"
-                id="manualSessionCode"
-                placeholder="الصق كود الجلسة هنا"
-                style="direction: ltr; font-family: monospace;"
-              />
-            </div>
-            <button
-              onclick="submitManualCode()"
-              style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); width: 100%; padding: 12px; border: none; border-radius: 8px; color: white; font-size: 16px; cursor: pointer; font-weight: 600; font-family: 'Cairo', sans-serif;"
-            >
-              تسجيل الحضور
-            </button>
-            <div id="manualCodeMessage" style="margin-top: 10px;"></div>
-          </div>
-        </div>
-
-        <!-- تبويب سجل الحضور -->
-        <div id="recordsTab" class="card hidden">
-          <h2>📊 سجل الحضور والإحصائيات</h2>
-          <button
-            onclick="loadAttendanceRecords()"
-            class="btn-secondary"
-            style="width: auto; padding: 10px 20px; margin-bottom: 20px"
-          >
-            تحديث البيانات
-          </button>
-
-          <div id="warningBox"></div>
-
-          <div class="stats-grid" id="statsGrid"></div>
-
-          <h3>آخر سجلات الحضور</h3>
-          <div id="attendanceRecords"></div>
-        </div>
-
-        <!-- تبويب QR الخاص بالطالب -->
-        <div id="myqrTab" class="card hidden">
-          <h2>📱 QR Code الخاص بي</h2>
-          <p style="color: #666; margin-bottom: 20px">
-            يمكن للدكتور مسح هذا الكود لتسجيل حضورك يدوياً
-          </p>
-          <div class="qr-display-card">
-            <div id="myQrcode"></div>
-            <p class="session-code-text">
-              كود الطالب: <span class="session-code" id="myStudentCode"></span>
-            </p>
-            <p class="qr-instruction">
-              📱 أظهر هذا الكود للدكتور لتسجيل حضورك يدوياً
-            </p>
-          </div>
-        </div>
+<body>
+  <div class="container">
+    <!-- Header مع رابط العودة -->
+    <div class="page-header">
+      <div class="header-content">
+        <a href="index.html" class="back-link">
+          <span class="back-icon">←</span>
+          العودة للصفحة الرئيسية
+        </a>
+        <h1 class="page-title">لوحة تحكم الطالب</h1>
       </div>
     </div>
 
-    <!-- المكتبات الخارجية -->
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-    <script src="https://unpkg.com/html5-qrcode"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-    <script src="./js/shared.js"></script>
-    <script src="./js/student.js"></script>
-  </body>
+    <!-- لوحة تحكم الطالب -->
+    <div id="studentDashboard">
+      <div class="header">
+        <div class="user-info">
+          <div class="avatar" id="studentAvatar"></div>
+          <div>
+            <h3 id="studentName" style="margin-bottom: 5px"></h3>
+            <p style="color: #fff; font-size: 14px">طالب</p>
+          </div>
+        </div>
+        <button onclick="logout()" class="btn-danger" style="width: auto; padding: 10px 20px">
+          تسجيل الخروج
+        </button>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" onclick="showStudentTab('scan', event)">
+          مسح QR
+        </button>
+        <button class="tab" onclick="showStudentTab('records', event)">
+          سجل الحضور
+        </button>
+        <button class="tab" onclick="showStudentTab('myqr', event)">
+          QR الخاص بي
+        </button>
+      </div>
+
+      <!-- تبويب مسح QR -->
+      <div id="scanTab" class="card">
+        <h2>📷 مسح QR Code</h2>
+        <div id="scanMessage"></div>
+        <div class="scanner-container">
+          <div id="reader"></div>
+        </div>
+        <button onclick="stopScanner()" class="btn-secondary" style="margin-top: 15px">
+          إيقاف الماسح
+        </button>
+        <button onclick="startScanner()" style="margin-top: 10px">
+          تشغيل الماسح
+        </button>
+
+        <!-- إدخال يدوي لكود الجلسة -->
+        <div style="margin-top: 20px; border-top: 2px solid #e2e8f0; padding-top: 20px;">
+          <h3>📝 إدخال كود الجلسة يدويًا</h3>
+          <p style="color: #666; margin-bottom: 15px;">إذا لم تتمكن من مسح QR Code، يمكنك إدخال كود الجلسة مباشرة</p>
+          <div class="form-group">
+            <label for="manualSessionCode">كود الجلسة:</label>
+            <input type="text" id="manualSessionCode" placeholder="الصق كود الجلسة هنا"
+              style="direction: ltr; font-family: monospace;" />
+          </div>
+          <button onclick="submitManualCode()"
+            style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); width: 100%; padding: 12px; border: none; border-radius: 8px; color: white; font-size: 16px; cursor: pointer; font-weight: 600; font-family: 'Cairo', sans-serif;">
+            تسجيل الحضور
+          </button>
+          <div id="manualCodeMessage" style="margin-top: 10px;"></div>
+        </div>
+      </div>
+
+      <!-- تبويب سجل الحضور -->
+      <div id="recordsTab" class="card hidden">
+        <h2>📊 سجل الحضور والإحصائيات</h2>
+        <button onclick="loadAttendanceRecords()" class="btn-secondary"
+          style="width: auto; padding: 10px 20px; margin-bottom: 20px">
+          تحديث البيانات
+        </button>
+
+        <div id="warningBox"></div>
+
+        <div class="stats-grid" id="statsGrid"></div>
+
+        <h3>آخر سجلات الحضور</h3>
+        <div id="attendanceRecords"></div>
+      </div>
+
+      <!-- تبويب QR الخاص بالطالب -->
+      <div id="myqrTab" class="card hidden">
+        <h2>📱 QR Code الخاص بي</h2>
+        <p style="color: #666; margin-bottom: 20px">
+          يمكن للدكتور مسح هذا الكود لتسجيل حضورك يدوياً
+        </p>
+        <div class="qr-display-card">
+          <div id="myQrcode"></div>
+          <p class="session-code-text">
+            كود الطالب: <span class="session-code" id="myStudentCode"></span>
+          </p>
+          <p class="qr-instruction">
+            📱 أظهر هذا الكود للدكتور لتسجيل حضورك يدوياً
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- المكتبات الخارجية -->
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <script src="./js/shared.js"></script>
+  <script src="./js/student.js"></script>
+</body>
+
 </html>

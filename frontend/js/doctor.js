@@ -8,11 +8,11 @@ let doctorScanner = null;
 // تهيئة صفحة الدكتور
 document.addEventListener('DOMContentLoaded', function () {
   console.log('📄 تم تحميل DOM');
-  
+
   // التحقق من الصلاحيات أولاً
   doctorUser = checkAuth();
   console.log('👤 المستخدم:', doctorUser);
-  
+
   if (!doctorUser || doctorUser.role !== 'professor') {
     console.warn('⚠️ لا توجد صلاحيات دكتور');
     window.location.href = 'login.html';
@@ -22,23 +22,31 @@ document.addEventListener('DOMContentLoaded', function () {
   // عرض معلومات المستخدم
   const profNameEl = document.getElementById("profName");
   const profAvatarEl = document.getElementById("profAvatar");
-  
+
   if (profNameEl) {
     profNameEl.textContent = doctorUser.full_name;
     console.log('✅ تم عرض الاسم:', doctorUser.full_name);
   }
-  
+
   if (profAvatarEl) {
     profAvatarEl.textContent = getInitials(doctorUser.full_name);
   }
 });
 
 // التبديل بين تبويبات الدكتور
-function showProfTab(tab) {
+// التبديل بين تبويبات الدكتور
+function showProfTab(tab, event) {
   console.log('🔄 التبديل للتبويب:', tab);
-  
+
+  // استخدام event الممرر أو البحث عن global event
+  const evt = event || window.event;
+  const target = evt ? (evt.currentTarget || evt.target) : null;
+
   document.querySelectorAll("#professorDashboard .tab").forEach((t) => t.classList.remove("active"));
-  event.target.classList.add("active");
+
+  if (target) {
+    target.classList.add("active");
+  }
 
   document.getElementById("createSessionTab").classList.add("hidden");
   document.getElementById("activeSessionsTab").classList.add("hidden");
@@ -61,7 +69,7 @@ document.getElementById("createSessionForm").addEventListener("submit", async (e
 
   try {
     console.log('📡 إنشاء جلسة جديدة...');
-    
+
     const data = await apiRequest('/sessions/create', 'POST', {
       subject_name: document.getElementById("subjectName").value,
       duration: parseInt(document.getElementById("duration").value)
@@ -98,7 +106,7 @@ document.getElementById("createSessionForm").addEventListener("submit", async (e
 function copySessionCode() {
   const codeElement = document.getElementById('displaySessionCode');
   const code = codeElement.textContent;
-  
+
   // استخدام Clipboard API
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(code).then(() => {
@@ -107,7 +115,7 @@ function copySessionCode() {
       const originalText = button.textContent;
       button.textContent = '✅ تم النسخ!';
       button.style.background = '#48bb78';
-      
+
       setTimeout(() => {
         button.textContent = originalText;
         button.style.background = '#667eea';
@@ -158,11 +166,11 @@ function fallbackCopyTextToClipboard(text) {
 // تحميل الجلسات النشطة
 async function loadActiveSessions() {
   console.log('📚 تحميل الجلسات النشطة...');
-  
+
   try {
     const data = await apiRequest('/sessions/active');
     console.log('📥 الجلسات:', data);
-    
+
     const list = document.getElementById("sessionsList");
 
     if (data.sessions.length === 0) {
@@ -180,7 +188,7 @@ async function loadActiveSessions() {
         </p>
       </div>
     `).join("");
-    
+
     console.log('✅ تم تحميل الجلسات');
   } catch (error) {
     console.error("❌ خطأ في تحميل الجلسات:", error);
@@ -191,7 +199,7 @@ async function loadActiveSessions() {
 // تحميل الجلسات النشطة للاختيار من بينها في مسح QR
 async function loadActiveSessionsForScan() {
   console.log('📋 تحميل الجلسات للمسح...');
-  
+
   try {
     const data = await apiRequest('/sessions/active');
     const select = document.getElementById("activeSessionSelect");
@@ -211,7 +219,7 @@ async function loadActiveSessionsForScan() {
       option.textContent = `${session.subject_name} - ${session.session_code}`;
       select.appendChild(option);
     });
-    
+
     console.log('✅ تم تحميل الجلسات للمسح');
   } catch (error) {
     console.error("❌ خطأ في تحميل الجلسات:", error);

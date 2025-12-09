@@ -21,7 +21,7 @@ let attendanceChart = null;
 async function loadStatistics() {
   try {
     const data = await apiRequest('/admin/statistics');
-    
+
     const statsGrid = document.getElementById('statsGrid');
     statsGrid.innerHTML = `
       <div class="stat-card">
@@ -55,31 +55,36 @@ async function loadStatistics() {
 }
 
 // التبديل بين التبويبات
-function showAdminTab(tabName) {
+// التبديل بين التبويبات
+function showAdminTab(tabName, event) {
   document.getElementById('usersTab').classList.add('hidden');
   document.getElementById('sessionsTab').classList.add('hidden');
   document.getElementById('attendanceTab').classList.add('hidden');
   document.getElementById('studentManagementTab').classList.add('hidden');
-  
+
+  // استخدام event الممرر أو البحث عن global event
+  const evt = event || window.event;
+  const target = evt ? (evt.currentTarget || evt.target) : null;
+
   document.querySelectorAll('.tab').forEach(tab => {
     tab.classList.remove('active');
   });
-  
+
+  if (target) {
+    target.classList.add('active');
+  }
+
   if (tabName === 'users') {
     document.getElementById('usersTab').classList.remove('hidden');
-    document.querySelectorAll('.tab')[0].classList.add('active');
     loadUsers();
   } else if (tabName === 'sessions') {
     document.getElementById('sessionsTab').classList.remove('hidden');
-    document.querySelectorAll('.tab')[1].classList.add('active');
     loadSessions();
   } else if (tabName === 'attendance') {
     document.getElementById('attendanceTab').classList.remove('hidden');
-    document.querySelectorAll('.tab')[2].classList.add('active');
     loadAttendance();
   } else if (tabName === 'student-management') {
     document.getElementById('studentManagementTab').classList.remove('hidden');
-    document.querySelectorAll('.tab')[3].classList.add('active');
   }
 }
 
@@ -89,10 +94,10 @@ async function loadUsers() {
     const role = document.getElementById('roleFilter').value;
     const url = role ? `/admin/users?role=${role}` : '/admin/users';
     const data = await apiRequest(url);
-    
+
     window.allUsers = data.users;
     displayUsers(data.users);
-    
+
   } catch (error) {
     console.error('Error loading users:', error);
     alert('خطأ في تحميل المستخدمين');
@@ -102,12 +107,12 @@ async function loadUsers() {
 // عرض المستخدمين
 function displayUsers(users) {
   const usersList = document.getElementById('usersList');
-  
+
   if (users.length === 0) {
     usersList.innerHTML = '<p style="text-align: center; color: #718096; padding: 40px;">لا يوجد مستخدمين</p>';
     return;
   }
-  
+
   usersList.innerHTML = `
     <div class="table-container">
       <table class="data-table">
@@ -184,13 +189,13 @@ function closeUserModal() {
 // حفظ المستخدم
 document.getElementById('userForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  
+
   const userId = document.getElementById('userId').value;
   const username = document.getElementById('username').value;
   const fullName = document.getElementById('fullName').value;
   const password = document.getElementById('password').value;
   const role = document.getElementById('role').value;
-  
+
   try {
     if (userId) {
       await apiRequest(`/admin/users/${userId}`, 'PUT', {
@@ -207,7 +212,7 @@ document.getElementById('userForm').addEventListener('submit', async (e) => {
       });
       alert('✅ تم إضافة المستخدم بنجاح!');
     }
-    
+
     closeUserModal();
     loadUsers();
     loadStatistics();
@@ -221,7 +226,7 @@ async function deleteUser(id, name) {
   if (!confirm(`هل أنت متأكد من حذف المستخدم "${name}"؟\nسيتم حذف جميع سجلات الحضور المرتبطة به.`)) {
     return;
   }
-  
+
   try {
     await apiRequest(`/admin/users/${id}`, 'DELETE');
     alert('✅ تم حذف المستخدم بنجاح!');
@@ -237,22 +242,22 @@ async function loadSessions() {
   try {
     const data = await apiRequest('/admin/sessions');
     const filter = document.getElementById('sessionFilter')?.value || 'all';
-    
+
     let sessions = data.sessions;
-    
+
     if (filter === 'active') {
       sessions = sessions.filter(s => s.is_active && new Date(s.expires_at) > new Date());
     } else if (filter === 'expired') {
       sessions = sessions.filter(s => !s.is_active || new Date(s.expires_at) <= new Date());
     }
-    
+
     const sessionsList = document.getElementById('sessionsList');
-    
+
     if (sessions.length === 0) {
       sessionsList.innerHTML = '<p style="text-align: center; color: #718096; padding: 40px;">لا توجد جلسات</p>';
       return;
     }
-    
+
     sessionsList.innerHTML = `
       <div class="table-container">
         <table class="data-table">
@@ -269,8 +274,8 @@ async function loadSessions() {
           </thead>
           <tbody>
             ${sessions.map((s, index) => {
-              const isActive = s.is_active && new Date(s.expires_at) > new Date();
-              return `
+      const isActive = s.is_active && new Date(s.expires_at) > new Date();
+      return `
                 <tr>
                   <td>${index + 1}</td>
                   <td>${s.subject_name}</td>
@@ -285,7 +290,7 @@ async function loadSessions() {
                   </td>
                 </tr>
               `;
-            }).join('')}
+    }).join('')}
           </tbody>
         </table>
       </div>
@@ -299,16 +304,16 @@ async function loadSessions() {
 async function loadAttendance() {
   try {
     const data = await apiRequest('/admin/attendance');
-    
+
     window.allAttendance = data.records;
-    
+
     const attendanceList = document.getElementById('attendanceList');
-    
+
     if (data.records.length === 0) {
       attendanceList.innerHTML = '<p style="text-align: center; color: #718096; padding: 40px;">لا توجد سجلات حضور</p>';
       return;
     }
-    
+
     attendanceList.innerHTML = `
       <div class="table-container">
         <table class="data-table">
@@ -352,7 +357,7 @@ async function deleteAttendance(id, studentName) {
   if (!confirm(`هل أنت متأكد من حذف سجل حضور الطالب "${studentName}"؟`)) {
     return;
   }
-  
+
   try {
     await apiRequest(`/admin/attendance/${id}`, 'DELETE');
     alert('✅ تم حذف سجل الحضور بنجاح!');
@@ -368,29 +373,29 @@ async function deleteAttendance(id, studentName) {
 // البحث عن طالب
 async function searchStudent() {
   const searchTerm = document.getElementById('studentSearch').value.trim();
-  
+
   if (!searchTerm) {
     showMessage('studentSearchMessage', '❌ يرجى إدخال اسم المستخدم أو الرقم الجامعي', 'error');
     return;
   }
-  
+
   try {
     const data = await apiRequest('/admin/users?role=student');
-    const student = data.users.find(u => 
+    const student = data.users.find(u =>
       u.username.toLowerCase() === searchTerm.toLowerCase() ||
       u.full_name.toLowerCase().includes(searchTerm.toLowerCase())
     );
-    
+
     if (!student) {
       showMessage('studentSearchMessage', '❌ لم يتم العثور على الطالب', 'error');
       document.getElementById('studentDetails').classList.add('hidden');
       return;
     }
-    
+
     // عرض تفاصيل الطالب
     await displayStudentDetails(student);
     showMessage('studentSearchMessage', '✅ تم العثور على الطالب', 'success');
-    
+
   } catch (error) {
     showMessage('studentSearchMessage', '❌ خطأ في البحث: ' + error.message, 'error');
   }
@@ -402,15 +407,15 @@ async function displayStudentDetails(student) {
     // الحصول على سجلات الحضور
     const attendanceData = await apiRequest('/admin/attendance');
     const studentRecords = attendanceData.records.filter(r => r.student_username === student.username);
-    
+
     // الحصول على الجلسات
     const sessionsData = await apiRequest('/admin/sessions');
     const totalSessions = sessionsData.sessions.length;
-    
+
     const attendedCount = studentRecords.length;
     const absentCount = totalSessions - attendedCount;
     const absenceRate = totalSessions > 0 ? ((absentCount / totalSessions) * 100).toFixed(2) : 0;
-    
+
     // تحديد حالة الطالب
     let statusClass = 'badge-active';
     let statusText = '✅ جيد';
@@ -421,7 +426,7 @@ async function displayStudentDetails(student) {
       statusClass = 'badge';
       statusText = '⚠️ إنذار';
     }
-    
+
     // حفظ البيانات للاستخدام لاحقاً
     window.currentStudent = {
       ...student,
@@ -431,7 +436,7 @@ async function displayStudentDetails(student) {
       absentCount,
       absenceRate
     };
-    
+
     // عرض التفاصيل
     document.getElementById('studentDetails').innerHTML = `
       <div class="student-info-card">
@@ -479,9 +484,9 @@ async function displayStudentDetails(student) {
         </div>
       </div>
     `;
-    
+
     document.getElementById('studentDetails').classList.remove('hidden');
-    
+
   } catch (error) {
     console.error('Error displaying student details:', error);
   }
@@ -490,16 +495,16 @@ async function displayStudentDetails(student) {
 // عرض سجلات الطالب
 async function viewStudentRecords() {
   if (!window.currentStudent) return;
-  
+
   const records = window.currentStudent.records;
-  
+
   if (records.length === 0) {
-    document.getElementById('studentRecordsList').innerHTML = 
+    document.getElementById('studentRecordsList').innerHTML =
       '<p style="text-align: center; padding: 20px; color: #666;">لا توجد سجلات حضور</p>';
     document.getElementById('studentRecordsModal').classList.remove('hidden');
     return;
   }
-  
+
   document.getElementById('studentRecordsList').innerHTML = `
     <div class="table-container">
       <table class="data-table">
@@ -529,7 +534,7 @@ async function viewStudentRecords() {
       </table>
     </div>
   `;
-  
+
   document.getElementById('studentRecordsModal').classList.remove('hidden');
 }
 
@@ -541,22 +546,22 @@ function closeRecordsModal() {
 // فتح نافذة إضافة حضور
 async function showAddAttendanceModal() {
   if (!window.currentStudent) return;
-  
+
   try {
     // تحميل الجلسات
     const data = await apiRequest('/admin/sessions');
     const sessions = data.sessions;
-    
+
     const select = document.getElementById('sessionSelect');
     select.innerHTML = '<option value="">اختر الجلسة...</option>';
-    
+
     sessions.forEach(s => {
       const option = document.createElement('option');
       option.value = s.id;
       option.textContent = `${s.subject_name} - ${s.professor_name} - ${formatDate(s.created_at)}`;
       select.appendChild(option);
     });
-    
+
     document.getElementById('addAttendanceModal').classList.remove('hidden');
   } catch (error) {
     alert('❌ خطأ في تحميل الجلسات: ' + error.message);
@@ -572,29 +577,29 @@ function closeAddAttendanceModal() {
 // حفظ الحضور الجديد
 document.getElementById('addAttendanceForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  
+
   if (!window.currentStudent) return;
-  
+
   const sessionId = document.getElementById('sessionSelect').value;
-  
+
   if (!sessionId) {
     alert('❌ يرجى اختيار جلسة');
     return;
   }
-  
+
   try {
     await apiRequest('/admin/attendance', 'POST', {
       student_id: window.currentStudent.id,
       session_id: parseInt(sessionId)
     });
-    
+
     alert('✅ تم إضافة الحضور بنجاح!');
     closeAddAttendanceModal();
-    
+
     // إعادة تحميل تفاصيل الطالب
     await displayStudentDetails(window.currentStudent);
     loadStatistics();
-    
+
   } catch (error) {
     alert('❌ ' + error.message);
   }
@@ -618,6 +623,64 @@ function getRoleIcon(role) {
   };
   return icons[role] || '👤';
 }
+
+// فتح modal إضافة مستخدم
+function showAddUserModal() {
+  console.log('📝 فتح نموذج إضافة مستخدم');
+  document.getElementById('addUserModal').classList.remove('hidden');
+  document.getElementById('addUserForm').reset();
+  document.getElementById('addUserMessage').innerHTML = '';
+}
+
+// إغلاق modal إضافة مستخدم
+function closeAddUserModal() {
+  console.log('🔐 إغلاق نموذج إضافة مستخدم');
+  document.getElementById('addUserModal').classList.add('hidden');
+}
+
+// معالج إرسال نموذج إضافة مستخدم
+document.addEventListener('DOMContentLoaded', function() {
+  const addUserForm = document.getElementById('addUserForm');
+  if (addUserForm) {
+    addUserForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      console.log('📤 إرسال نموذج إضافة مستخدم');
+
+      const username = document.getElementById('newUsername').value.trim();
+      const full_name = document.getElementById('newFullName').value.trim();
+      const password = document.getElementById('newPassword').value.trim();
+      const role = document.getElementById('newUserRole').value;
+
+      if (!username || !full_name || !password || !role) {
+        showMessage('addUserMessage', '❌ يرجى ملء جميع الحقول', 'error');
+        return;
+      }
+
+      try {
+        console.log('📡 إرسال الطلب للخادم...');
+        const response = await apiRequest('/admin/users', 'POST', {
+          username: username,
+          full_name: full_name,
+          password: password,
+          role: role
+        });
+
+        console.log('✅ تم إضافة المستخدم:', response);
+        showMessage('addUserMessage', '✅ تم إضافة المستخدم بنجاح!', 'success');
+
+        // إعادة تحميل قائمة المستخدمين بعد ثانية
+        setTimeout(() => {
+          closeAddUserModal();
+          loadUsers();
+        }, 1500);
+
+      } catch (error) {
+        console.error('❌ خطأ:', error);
+        showMessage('addUserMessage', '❌ ' + (error.message || 'فشل إضافة المستخدم'), 'error');
+      }
+    });
+  }
+});
 
 // تحميل البيانات عند فتح الصفحة
 loadStatistics();
