@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import sqlite3
+import math
 import jwt
 import datetime
 import secrets
@@ -11,6 +12,7 @@ from functools import wraps
 app = Flask(__name__, static_folder='../frontend', static_url_path='')
 CORS(app)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
+
 
 # إنشاء قاعدة البيانات
 def init_db():
@@ -49,6 +51,54 @@ def init_db():
         FOREIGN KEY (session_id) REFERENCES sessions(id),
         UNIQUE(student_id, session_id)
     )''')
+
+    # جدول ربط الجهاز بمستخدم (Device binding)
+    c.execute('''CREATE TABLE IF NOT EXISTS device_bindings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id TEXT UNIQUE NOT NULL,
+        user_id INTEGER NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )''')
+
+    # جدول أجهزة الأدمن الموثوقة
+    c.execute('''CREATE TABLE IF NOT EXISTS admin_devices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id TEXT UNIQUE NOT NULL,
+        user_id INTEGER NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )''')
+
+    # جدول الأجهزة الموثوقة (تسمح لأي حساب بالدخول من هذا الجهاز)
+    c.execute('''CREATE TABLE IF NOT EXISTS trusted_devices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id TEXT UNIQUE NOT NULL,
+        note TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+
+    # جدول الجيوفينس (قواعد المساحة المسموحة)
+    c.execute('''CREATE TABLE IF NOT EXISTS geofence (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lat REAL NOT NULL,
+        lng REAL NOT NULL,
+        radius_m INTEGER NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    # Add optional columns for rectangle geofence support
+    try:
+        c.execute("ALTER TABLE geofence ADD COLUMN shape TEXT DEFAULT 'circle'")
+    except Exception:
+        pass
+    try:
+        c.execute("ALTER TABLE geofence ADD COLUMN width_m INTEGER")
+    except Exception:
+        pass
+    try:
+        c.execute("ALTER TABLE geofence ADD COLUMN height_m INTEGER")
+    except Exception:
+        pass
     
     # إنشاء حساب Admin الافتراضي
     admin_pass = hashlib.sha256('admin123'.encode()).hexdigest()
@@ -85,9 +135,26 @@ def token_required(f):
 def admin_required(f):
     @wraps(f)
     def decorated(current_user, *args, **kwargs):
-        if current_user['role'] != 'admin':
-            return jsonify({'error': 'تحتاج صلاحيات مسؤول'}), 403
-        return f(current_user, *args, **kwargs)
+        # Allow if token role is admin
+        if current_user.get('role') == 'admin':
+            return f(current_user, *args, **kwargs)
+
+        # Otherwise check if request comes from a trusted admin device
+        device_id = request.headers.get('X-Device-Id') or request.json and request.json.get('device_id')
+        if device_id:
+            try:
+                conn = sqlite3.connect('attendance.db')
+                c = conn.cursor()
+                c.execute('SELECT user_id FROM admin_devices WHERE device_id=?', (device_id,))
+                row = c.fetchone()
+                conn.close()
+                if row:
+                    return f(current_user, *args, **kwargs)
+            except Exception:
+                # if DB error, deny access
+                return jsonify({'error': 'تحتاج صلاحيات مسؤول'}), 403
+
+        return jsonify({'error': 'تحتاج صلاحيات مسؤول'}), 403
     return decorated
 
 # Health Check
@@ -101,6 +168,9 @@ def login():
     data = request.json
     username = data.get('username')
     password = data.get('password')
+    device_id = data.get('device_id')
+    user_lat = data.get('lat')
+    user_lng = data.get('lng')
     
     if not username or not password:
         return jsonify({'error': 'اسم المستخدم وكلمة المرور مطلوبة'}), 400
@@ -109,30 +179,73 @@ def login():
     
     conn = sqlite3.connect('attendance.db')
     c = conn.cursor()
+
     c.execute("SELECT id, username, full_name, role FROM users WHERE username=? AND password=?",
              (username, password_hash))
     user = c.fetchone()
+
+    if not user:
+        conn.close()
+        return jsonify({'error': 'اسم المستخدم أو كلمة المرور غير صحيحة'}), 401
+
+    # (geofence/device-location feature disabled) -- do not record device locations here
+
+    # Geofence enforcement disabled (login allowed regardless of geofence)
+
+    # If device_id provided, enforce device binding (unless device is trusted)
+    if device_id:
+        try:
+            c.execute("SELECT id FROM trusted_devices WHERE device_id=?", (device_id,))
+            trusted = c.fetchone()
+
+            if not trusted:
+                # check existing binding
+                c.execute("SELECT user_id FROM device_bindings WHERE device_id=?", (device_id,))
+                bound = c.fetchone()
+                if bound:
+                    bound_user_id = bound[0]
+                    if bound_user_id != user[0]:
+                        # device already bound to another user - deny login
+                        conn.close()
+                        return jsonify({'error': 'هذا الجهاز مرتبط بحساب آخر. اطلب من المسؤول فك الربط إذا لزم الأمر.'}), 403
+                else:
+                    # bind device to this user
+                    try:
+                        c.execute("INSERT OR IGNORE INTO device_bindings (device_id, user_id) VALUES (?, ?)",
+                                  (device_id, user[0]))
+                        conn.commit()
+                    except Exception:
+                        pass
+            else:
+                # If device is trusted and the user logging in is admin, ensure device is recorded in admin_devices too
+                try:
+                    if user[3] == 'admin':
+                        c.execute('INSERT OR IGNORE INTO admin_devices (device_id, user_id) VALUES (?, ?)', (device_id, user[0]))
+                        conn.commit()
+                except Exception:
+                    pass
+        except Exception:
+            # On DB error, be conservative and deny access
+            conn.close()
+            return jsonify({'error': 'خطأ بالخادم أثناء التحقق من الجهاز'}), 500
+
     conn.close()
-    
-    if user:
-        token = jwt.encode({
-            'user_id': user[0],
+    token = jwt.encode({
+        'user_id': user[0],
+        'username': user[1],
+        'role': user[3],
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+    }, app.config['SECRET_KEY'], algorithm="HS256")
+
+    return jsonify({
+        'token': token,
+        'user': {
+            'id': user[0],
             'username': user[1],
-            'role': user[3],
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
-        }, app.config['SECRET_KEY'], algorithm="HS256")
-        
-        return jsonify({
-            'token': token,
-            'user': {
-                'id': user[0],
-                'username': user[1],
-                'full_name': user[2],
-                'role': user[3]
-            }
-        })
-    
-    return jsonify({'error': 'اسم المستخدم أو كلمة المرور غير صحيحة'}), 401
+            'full_name': user[2],
+            'role': user[3]
+        }
+    })
 
 # ==================== Admin APIs ====================
 
@@ -253,6 +366,205 @@ def delete_user(current_user, user_id):
     
     return jsonify({'message': 'تم حذف المستخدم بنجاح'})
 
+
+# فك ربط جهاز (Admin)
+@app.route('/api/admin/device-unbind', methods=['POST'])
+@token_required
+@admin_required
+def admin_unbind_device(current_user):
+    data = request.json
+    device_id = data.get('device_id')
+    user_id = data.get('user_id')
+
+    if not device_id and not user_id:
+        return jsonify({'error': 'device_id أو user_id مطلوب'}), 400
+
+    conn = sqlite3.connect('attendance.db')
+    c = conn.cursor()
+
+    if device_id:
+        c.execute('DELETE FROM device_bindings WHERE device_id=?', (device_id,))
+    if user_id:
+        c.execute('DELETE FROM device_bindings WHERE user_id=?', (user_id,))
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({'message': 'تم فك ربط الجهاز/المستخدم بنجاح'})
+
+
+# إدارة أجهزة الأدمن (Admin) - إضافة/حذف/قائمة
+@app.route('/api/admin/admin-devices', methods=['GET'])
+@token_required
+@admin_required
+def list_admin_devices(current_user):
+    conn = sqlite3.connect('attendance.db')
+    c = conn.cursor()
+    c.execute('SELECT id, device_id, user_id, created_at FROM admin_devices ORDER BY created_at DESC')
+    items = c.fetchall()
+    conn.close()
+    return jsonify({'devices': [{'id': r[0], 'device_id': r[1], 'user_id': r[2], 'created_at': r[3]} for r in items]})
+
+
+@app.route('/api/admin/admin-devices', methods=['POST'])
+@token_required
+@admin_required
+def add_admin_device(current_user):
+    data = request.json
+    device_id = data.get('device_id')
+    user_id = data.get('user_id')
+
+    if not device_id or not user_id:
+        return jsonify({'error': 'device_id و user_id مطلوبان'}), 400
+
+    conn = sqlite3.connect('attendance.db')
+    c = conn.cursor()
+    try:
+        c.execute('INSERT OR IGNORE INTO admin_devices (device_id, user_id) VALUES (?, ?)', (device_id, user_id))
+        conn.commit()
+        conn.close()
+        return jsonify({'message': 'تم إضافة جهاز الأدمن بنجاح'}), 201
+    except Exception as e:
+        conn.close()
+        return jsonify({'error': 'خطأ أثناء إضافة جهاز الأدمن'}), 500
+
+
+@app.route('/api/admin/admin-devices', methods=['DELETE'])
+@token_required
+@admin_required
+def remove_admin_device(current_user):
+    data = request.json
+    device_id = data.get('device_id')
+    user_id = data.get('user_id')
+
+    if not device_id and not user_id:
+        return jsonify({'error': 'device_id أو user_id مطلوب'}), 400
+
+    conn = sqlite3.connect('attendance.db')
+    c = conn.cursor()
+    if device_id:
+        c.execute('DELETE FROM admin_devices WHERE device_id=?', (device_id,))
+    if user_id:
+        c.execute('DELETE FROM admin_devices WHERE user_id=?', (user_id,))
+    conn.commit()
+    conn.close()
+
+    return jsonify({'message': 'تم حذف جهاز الأدمن بنجاح'})
+
+
+# إدارة الأجهزة الموثوقة (أي حساب يمكن الدخول من هذه الأجهزة)
+@app.route('/api/admin/trusted-devices', methods=['GET'])
+@token_required
+@admin_required
+def list_trusted_devices(current_user):
+    conn = sqlite3.connect('attendance.db')
+    c = conn.cursor()
+    c.execute('SELECT id, device_id, note, created_at FROM trusted_devices ORDER BY created_at DESC')
+    items = c.fetchall()
+    conn.close()
+    return jsonify({'devices': [{'id': r[0], 'device_id': r[1], 'note': r[2], 'created_at': r[3]} for r in items]})
+
+
+@app.route('/api/admin/trusted-devices', methods=['POST'])
+@token_required
+@admin_required
+def add_trusted_device(current_user):
+    data = request.json
+    device_id = data.get('device_id')
+    note = data.get('note')
+
+    if not device_id:
+        return jsonify({'error': 'device_id مطلوب'}), 400
+
+    conn = sqlite3.connect('attendance.db')
+    c = conn.cursor()
+    try:
+        c.execute('INSERT OR IGNORE INTO trusted_devices (device_id, note) VALUES (?, ?)', (device_id, note))
+        conn.commit()
+        conn.close()
+        return jsonify({'message': 'تم إضافة الجهاز إلى القائمة الموثوقة'}), 201
+    except Exception:
+        conn.close()
+        return jsonify({'error': 'خطأ أثناء إضافة الجهاز'}), 500
+
+
+@app.route('/api/admin/trusted-devices', methods=['DELETE'])
+@token_required
+@admin_required
+def remove_trusted_device(current_user):
+    data = request.json
+    device_id = data.get('device_id')
+
+    if not device_id:
+        return jsonify({'error': 'device_id مطلوب'}), 400
+
+    conn = sqlite3.connect('attendance.db')
+    c = conn.cursor()
+    c.execute('DELETE FROM trusted_devices WHERE device_id=?', (device_id,))
+    conn.commit()
+    conn.close()
+
+    return jsonify({'message': 'تم حذف الجهاز الموثوق بنجاح'})
+
+
+# إدارة الجيوفينس (تحديد مركز ونطاق السماح)
+@app.route('/api/admin/geofence', methods=['GET'])
+@token_required
+@admin_required
+def get_geofence(current_user):
+    conn = sqlite3.connect('attendance.db')
+    c = conn.cursor()
+    c.execute('SELECT id, lat, lng, radius_m, shape, width_m, height_m, created_at FROM geofence ORDER BY created_at DESC LIMIT 1')
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return jsonify({'geofence': None})
+    return jsonify({'geofence': {'id': row[0], 'lat': row[1], 'lng': row[2], 'radius_m': row[3], 'shape': row[4], 'width_m': row[5], 'height_m': row[6], 'created_at': row[7]}})
+
+
+@app.route('/api/admin/geofence', methods=['POST'])
+@token_required
+@admin_required
+def set_geofence(current_user):
+    data = request.json
+    lat = data.get('lat')
+    lng = data.get('lng')
+    radius_m = data.get('radius_m')
+    shape = data.get('shape', 'circle')
+    width_m = data.get('width_m')
+    height_m = data.get('height_m')
+    # ignore any center_device_id (device-centred geofence disabled)
+    # center_device_id = data.get('center_device_id')
+
+    if lat is None or lng is None or radius_m is None:
+        return jsonify({'error': 'lat, lng, radius_m مطلوبة'}), 400
+
+    try:
+        radius_m = int(radius_m)
+    except Exception:
+        return jsonify({'error': 'radius_m يجب أن يكون رقم بالميترات'}), 400
+
+    conn = sqlite3.connect('attendance.db')
+    c = conn.cursor()
+    # اجعل السجل الحالي الوحيد عن طريق الحذف ثم الإدراج (بسيط وفعال هنا)
+    c.execute('DELETE FROM geofence')
+    c.execute('INSERT INTO geofence (lat, lng, radius_m, shape, width_m, height_m) VALUES (?, ?, ?, ?, ?, ?)', (lat, lng, radius_m, shape, width_m, height_m))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'تم تعيين نطاق الجيوفينس بنجاح'})
+
+
+@app.route('/api/admin/geofence', methods=['DELETE'])
+@token_required
+@admin_required
+def delete_geofence(current_user):
+    conn = sqlite3.connect('attendance.db')
+    c = conn.cursor()
+    c.execute('DELETE FROM geofence')
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'تم حذف نطاق الجيوفينس'})
+
 # الحصول على جميع الجلسات (Admin)
 @app.route('/api/admin/sessions', methods=['GET'])
 @token_required
@@ -281,6 +593,22 @@ def get_all_sessions(current_user):
             'is_active': s[6]
         } for s in sessions]
     })
+
+
+# حذف جلسة (Admin)
+@app.route('/api/admin/sessions/<int:session_id>', methods=['DELETE'])
+@token_required
+@admin_required
+def delete_session(current_user, session_id):
+    conn = sqlite3.connect('attendance.db')
+    c = conn.cursor()
+    # حذف سجلات الحضور المتعلقة أولاً
+    c.execute('DELETE FROM attendance WHERE session_id=?', (session_id,))
+    # ثم حذف الجلسة
+    c.execute('DELETE FROM sessions WHERE id=?', (session_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'تم حذف الجلسة بنجاح'})
 
 # الحصول على جميع سجلات الحضور (Admin)
 @app.route('/api/admin/attendance', methods=['GET'])
@@ -561,6 +889,8 @@ def record_attendance(current_user):
     
     data = request.json
     session_code = data.get('session_code')
+    user_lat = data.get('lat')
+    user_lng = data.get('lng')
     
     if not session_code:
         return jsonify({'error': 'كود الجلسة مطلوب'}), 400
@@ -592,6 +922,8 @@ def record_attendance(current_user):
     if existing:
         conn.close()
         return jsonify({'error': 'تم تسجيل حضورك مسبقاً لهذه الجلسة'}), 400
+
+    # Geofence enforcement disabled for attendance (attendance allowed regardless of geofence)
     
     # تسجيل الحضور
     c.execute("INSERT INTO attendance (student_id, session_id) VALUES (?, ?)",
@@ -665,9 +997,7 @@ def index():
 
 if __name__ == '__main__':
     # app.run(debug=True, port=5000)
-    
-    
-         app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5000)
 
-    
-   
+
+
