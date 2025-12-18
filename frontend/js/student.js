@@ -5,6 +5,7 @@ console.log('✅ تم تحميل student.js');
 // متغيرات عامة (بدون let لأن shared.js عرّفها)
 let studentUser = null;
 let studentScanner = null;
+let studentProcessing = false; // debounce flag for scan handling
 
 // انتظر حتى يتم تحميل الصفحة
 document.addEventListener('DOMContentLoaded', function () {
@@ -80,7 +81,7 @@ function showStudentTab(tabName, event) {
 
 // تشغيل الماسح الضوئي
 async function startScanner() {
-  console.log('📷 تشغيل الماسح الضوئي...');
+  console.log('📷 بدء الماسح الضوئي...');
 
   if (studentScanner) {
     console.log('⚠️ الماسح يعمل بالفعل، إيقافه أولاً');
@@ -90,34 +91,83 @@ async function startScanner() {
   studentScanner = new Html5Qrcode("reader");
 
   try {
+    // Prefer explicit back/rear camera when available (better on phones)
+    let cameraId = null;
+    try {
+      const cams = await Html5Qrcode.getCameras();
+      if (cams && cams.length) {
+        // try to find a back/rear camera by label
+        cameraId = cams[0].id;
+        for (const c of cams) {
+          if (/back|rear|environment/i.test(c.label)) { cameraId = c.id; break; }
+        }
+        console.log('Available cameras:', cams.map(c=>c.label || c.id));
+      }
+    } catch (e) {
+      console.warn('getCameras failed, falling back to facingMode environment', e);
+    }
+
+    const cameraArg = cameraId ? cameraId : { facingMode: "environment" };
+
     await studentScanner.start(
-      { facingMode: "environment" },
+      cameraArg,
       {
         fps: 10,
         qrbox: { width: 250, height: 250 }
       },
       async (decodedText) => {
         console.log('✅ تم مسح QR Code:', decodedText);
-        // إيقاف الماسح مؤقتاً
-        await stopScanner();
+        if (studentProcessing) return;
+        studentProcessing = true;
 
-        // تسجيل الحضور
+        // تسجيل الحضور: نحاول الحصول على موقع دقيق لكن إن فشلنا نكمل بدون الموقع
         try {
-          const data = await apiRequest('/attendance/record', 'POST', {
-            session_code: decodedText
-          });
+          let lat = null, lng = null, accuracy = null;
+          try {
+            const best = await getAccuratePosition({samples: 3, perTimeout: 8000, desiredAccuracy: 30});
+            lat = best.latitude;
+            lng = best.longitude;
+            accuracy = best.accuracy;
+          } catch (geoErr) {
+            // لا نقطع العملية إن رفض المستخدم الموقع أو حدث خطأ؛ نتابع بدون موقع
+            console.warn('⚠️ تعذر الحصول على الموقع، سيتم متابعة التسجيل بدون إحداثيات:', geoErr && geoErr.message ? geoErr.message : geoErr);
+            showMessage('scanMessage', '⚠️ لم يتم تحديد الموقع — سيتم محاولة التسجيل بدون إحداثيات', 'error');
+          }
+
+          // support combined QR format: session_code|session_token
+          let session_code = decodedText;
+          let session_token = null;
+          if (decodedText && decodedText.includes('|')) {
+            const parts = decodedText.split('|');
+            session_code = parts[0];
+            session_token = parts[1] || null;
+          }
+
+          const payload = { session_code: session_code };
+          if (lat !== null) payload.lat = lat;
+          if (lng !== null) payload.lng = lng;
+          if (accuracy !== null) payload.accuracy = accuracy;
+          if (session_token) payload.session_token = session_token;
+
+          const data = await apiRequest('/attendance/record', 'POST', payload);
 
           console.log('✅ تم تسجيل الحضور:', data);
           showMessage('scanMessage', data.message, 'success');
 
-          // إعادة تشغيل الماسح بعد 3 ثوانٍ
-          setTimeout(() => startScanner(), 3000);
+          // انتظار قصير قبل قبول عملية مسح أخرى
+          setTimeout(() => { studentProcessing = false; }, 1500);
 
         } catch (error) {
           console.error('❌ خطأ في تسجيل الحضور:', error);
-          showMessage('scanMessage', error.message, 'error');
-          setTimeout(() => startScanner(), 3000);
+          // إذا كانت رسالة الخطأ تخص انتهاك الربط بالجهاز، أعرضها كما هي
+          showMessage('scanMessage', error.message || String(error), 'error');
+          // اعادة تمكين المسح بعد مهلة
+          setTimeout(() => { studentProcessing = false; }, 3000);
         }
+      },
+      (errorMessage) => {
+        // frequent scanning errors (no code in frame) — show concise message but keep camera
+        // console.debug('QR scan error:', errorMessage);
       }
     );
 
@@ -276,10 +326,24 @@ async function submitManualCode() {
   }
 
   try {
-    console.log('📡 إرسال الطلب للخادم...');
-    const data = await apiRequest('/attendance/record', 'POST', {
-      session_code: sessionCode
-    });
+    console.log('📡 الحصول على موقع الجهاز... (أخذ عينات لتحسين الدقة)');
+    const best = await getAccuratePosition({samples: 3, perTimeout: 8000, desiredAccuracy: 30});
+    const lat = best.latitude;
+    const lng = best.longitude;
+    const accuracy = best.accuracy;
+
+    console.log('📡 إرسال الطلب للخادم مع الموقع...');
+    // support manual entry of session_code or session_code|session_token
+    let session_code = sessionCode;
+    let session_token = null;
+    if (sessionCode.includes('|')) {
+      const parts = sessionCode.split('|');
+      session_code = parts[0];
+      session_token = parts[1] || null;
+    }
+    const payload = { session_code: session_code, lat: lat, lng: lng, accuracy: accuracy };
+    if (session_token) payload.session_token = session_token;
+    const data = await apiRequest('/attendance/record', 'POST', payload);
 
     console.log('✅ تم تسجيل الحضور بنجاح:', data);
     showMessage('manualCodeMessage', data.message, 'success');
@@ -290,8 +354,73 @@ async function submitManualCode() {
 
   } catch (error) {
     console.error('❌ خطأ في تسجيل الحضور:', error);
-    showMessage('manualCodeMessage', error.message, 'error');
+    if (error && error.code === 1) {
+      showMessage('manualCodeMessage', '❌ يلزم السماح بمشاركة الموقع لتمييز موقع الحضور', 'error');
+    } else {
+      showMessage('manualCodeMessage', error.message || String(error), 'error');
+    }
   }
 }
 
+// مساعدة للحصول على الموقع كـ Promise
+function getCurrentPositionPromise(timeout = 10000) {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('المتصفح لا يدعم الموقع الجغرافي'));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, (err) => reject(err), { enableHighAccuracy: true, timeout: timeout, maximumAge: 0 });
+  });
+}
+
+// طلب عدة عينات من الموقع ثم إرجاع متوسط مرجح بناءً على دقة كل عينة
+async function getAccuratePosition(opts = {}) {
+  const samples = opts.samples || 3;
+  const perTimeout = opts.perTimeout || 8000;
+  const desiredAccuracy = opts.desiredAccuracy || 25; // meters
+  const maxAttempts = opts.maxAttempts || (samples * 2);
+
+  const readings = [];
+
+  for (let attempt = 0; attempt < maxAttempts && readings.length < samples; attempt++) {
+    try {
+      const pos = await getCurrentPositionPromise(perTimeout);
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const acc = pos.coords.accuracy || 9999;
+      readings.push({ lat, lng, acc });
+      // إذا كانت هذه العينة جيدة بما يكفي وأن لدينا عدد كافٍ من العينات، اكسر
+      if (acc <= desiredAccuracy && readings.length >= Math.min(2, samples)) break;
+    } catch (err) {
+      // تجنب الكسر المباشر، حاول مرة أخرى حتى نصل لعدد محاولات
+      console.warn('مشكلة في الحصول على عينة الموقع:', err && err.message ? err.message : err);
+      // إذا كانت صلاحية الرفض (المستخدم رفض) أعد رمي الخطأ
+      if (err && err.code === 1) throw err;
+    }
+  }
+
+  if (readings.length === 0) throw new Error('تعذر الحصول على أي بيانات موقع. الرجاء السماح بالوصول للموقع والمحاولة مرة أخرى.');
+
+  // سنحسب متوسطًا مرجحًا بالاعتماد على 1/accuracy كوزن
+  let weightSum = 0;
+  let latSum = 0;
+  let lngSum = 0;
+  let accSum = 0;
+
+  for (const r of readings) {
+    const w = r.acc > 0 ? 1 / r.acc : 1;
+    weightSum += w;
+    latSum += r.lat * w;
+    lngSum += r.lng * w;
+    accSum += r.acc;
+  }
+
+  const avgLat = latSum / weightSum;
+  const avgLng = lngSum / weightSum;
+  const avgAcc = accSum / readings.length;
+
+  return { latitude: avgLat, longitude: avgLng, accuracy: Math.max(5, Math.round(avgAcc)) };
+}
+
 console.log('✅ student.js جاهز');
+

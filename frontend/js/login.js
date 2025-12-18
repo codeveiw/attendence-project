@@ -41,14 +41,18 @@ document.addEventListener('DOMContentLoaded', function() {
     try {
       console.log('📡 إرسال الطلب إلى:', API_URL + '/login');
       
+      // include device id so backend can enforce one-account-per-device binding
+      const deviceIdHeader = (typeof getDeviceId === 'function') ? getDeviceId() : null;
       const response = await fetch(API_URL + '/login', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...(deviceIdHeader ? { 'X-Device-Id': deviceIdHeader } : {})
         },
         body: JSON.stringify({
           username: username,
-          password: password
+          password: password,
+          device_id: deviceIdHeader
         })
       });
       
@@ -131,6 +135,36 @@ document.addEventListener('DOMContentLoaded', function() {
   } else {
     console.log('✅ لا توجد جلسة سابقة - البقاء في صفحة تسجيل الدخول');
   }
+
+  // Initialize debug panel values and button
+  try {
+    const dbgApiUrlEl = document.getElementById('dbgApiUrl');
+    const dbgDeviceIdEl = document.getElementById('dbgDeviceId');
+    const dbgBtn = document.getElementById('dbgHealthBtn');
+    const dbgRes = document.getElementById('dbgResult');
+    if (dbgApiUrlEl) dbgApiUrlEl.textContent = (typeof API_URL !== 'undefined') ? API_URL : '(unset)';
+    if (dbgDeviceIdEl) dbgDeviceIdEl.textContent = (typeof getDeviceId === 'function') ? getDeviceId() : '(no getDeviceId)';
+    if (dbgBtn) {
+      dbgBtn.addEventListener('click', async () => {
+        if (dbgRes) dbgRes.textContent = 'Testing...';
+        try {
+          const url = (typeof API_URL !== 'undefined' ? API_URL : '/api') + '/health';
+          const r = await fetch(url, { method: 'GET' });
+          const ct = r.headers.get('content-type') || '';
+          let text = '';
+          if (ct.includes('application/json')) {
+            const j = await r.json();
+            text = JSON.stringify(j, null, 2);
+          } else {
+            text = await r.text();
+          }
+          if (dbgRes) dbgRes.textContent = `status: ${r.status}\n\n${text}`;
+        } catch (err) {
+          if (dbgRes) dbgRes.textContent = 'Error: ' + (err && err.message ? err.message : String(err));
+        }
+      });
+    }
+  } catch (e) { console.warn('Debug init failed', e); }
 });
 
 console.log('✅ login.js جاهز');

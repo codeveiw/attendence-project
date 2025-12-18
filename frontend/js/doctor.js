@@ -173,26 +173,139 @@ async function loadActiveSessions() {
 
     const list = document.getElementById("sessionsList");
 
-    if (data.sessions.length === 0) {
+    if (!data.sessions || data.sessions.length === 0) {
       list.innerHTML = '<p style="text-align: center; color: #666; padding: 30px;">📭 لا توجد جلسات نشطة حالياً</p>';
       return;
     }
 
-    list.innerHTML = data.sessions.map(s => `
-      <div class="session-card">
-        <h4>${s.subject_name}</h4>
-        <p style="margin: 10px 0;">كود الجلسة: <span class="session-code">${s.session_code}</span></p>
-        <p style="color: #666; font-size: 14px;">
-          📅 تم الإنشاء: ${formatDate(s.created_at)}<br>
-          ⏰ تنتهي في: ${formatDate(s.expires_at)}
-        </p>
-      </div>
-    `).join("");
+    // create grid container
+    list.innerHTML = '';
+    const grid = document.createElement('div');
+    grid.className = 'sessions-grid';
+
+    data.sessions.forEach((s) => {
+      const card = document.createElement('div');
+      card.className = 'session-card';
+
+      // top row: subject + status
+      const top = document.createElement('div');
+      top.className = 'session-top';
+      const subj = document.createElement('div');
+      subj.className = 'session-subject';
+      subj.textContent = s.subject_name;
+      const statusWrap = document.createElement('div');
+      const statusBadge = document.createElement('span');
+      statusBadge.className = 'badge-active';
+      statusBadge.textContent = 'نشطة';
+      statusWrap.appendChild(statusBadge);
+      top.appendChild(subj);
+      top.appendChild(statusWrap);
+
+      // body with meta
+      const body = document.createElement('div');
+      body.className = 'session-body';
+      const meta = document.createElement('div');
+      meta.className = 'session-meta';
+      meta.innerHTML = `📅 تم الإنشاء: ${formatDate(s.created_at)}<br>⏰ تنتهي في: ${formatDate(s.expires_at)}<br><strong>${formatTimeRemaining(s.expires_at)}</strong>`;
+
+      const codeRow = document.createElement('div');
+      codeRow.className = 'session-code-row';
+      const codeEl = document.createElement('span');
+      codeEl.className = 'session-code';
+      codeEl.textContent = s.session_code;
+      codeRow.appendChild(codeEl);
+
+      body.appendChild(meta);
+      body.appendChild(codeRow);
+
+      // qr + actions
+      const footer = document.createElement('div');
+      footer.style.display = 'flex';
+      footer.style.gap = '12px';
+      footer.style.alignItems = 'center';
+
+      const qrHolder = document.createElement('div');
+      qrHolder.style.minWidth = '160px';
+      qrHolder.style.minHeight = '160px';
+      qrHolder.id = `qr-${s.id}`;
+
+      const actions = document.createElement('div');
+      actions.className = 'session-actions';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'btn btn-secondary';
+      copyBtn.textContent = '📋 نسخ الكود';
+      copyBtn.addEventListener('click', () => copySessionCodeFromCard(s.session_code));
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn btn-icon btn-delete';
+      deleteBtn.title = 'حذف الجلسة';
+      deleteBtn.innerHTML = '🗑️';
+      deleteBtn.addEventListener('click', async () => {
+        if (!confirm('هل أنت متأكد من حذف هذه الجلسة؟ سيتم حذف سجلات الحضور المتعلقة بها.')) return;
+        try {
+          await deleteSession(s.id);
+          showMessage('sessionsList', '✅ تم حذف الجلسة بنجاح', 'success');
+          loadActiveSessions();
+        } catch (err) {
+          console.error('خطأ عند حذف الجلسة:', err);
+          showMessage('sessionsList', '❌ خطأ عند حذف الجلسة: ' + err.message, 'error');
+        }
+      });
+
+      actions.appendChild(copyBtn);
+      actions.appendChild(deleteBtn);
+
+      footer.appendChild(qrHolder);
+      footer.appendChild(actions);
+
+      card.appendChild(top);
+      card.appendChild(body);
+      card.appendChild(footer);
+
+      grid.appendChild(card);
+
+      // generate QR
+      try {
+        // clear any previous
+        qrHolder.innerHTML = '';
+        new QRCode(qrHolder, {
+          text: s.session_code,
+          width: 160,
+          height: 160,
+          colorDark: "#111827",
+          colorLight: "#ffffff",
+        });
+      } catch (e) {
+        console.warn('QR generation failed for', s.session_code, e);
+      }
+    });
+
+    list.appendChild(grid);
 
     console.log('✅ تم تحميل الجلسات');
   } catch (error) {
     console.error("❌ خطأ في تحميل الجلسات:", error);
     alert("❌ فشل تحميل الجلسات: " + error.message);
+  }
+}
+
+
+// حذف جلسة (نداء إلى API)
+async function deleteSession(sessionId) {
+  return apiRequest(`/sessions/${sessionId}`, 'DELETE');
+}
+
+function copySessionCodeFromCard(code) {
+  if (!code) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(code).then(() => {
+      alert('✅ تم نسخ كود الجلسة');
+    }).catch(() => {
+      alert('❌ فشل النسخ');
+    });
+  } else {
+    fallbackCopyTextToClipboard(code);
   }
 }
 

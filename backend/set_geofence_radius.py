@@ -21,20 +21,7 @@ def set_radius(meters):
             print('No geofence row found. Insert one using admin UI or via SQL.')
             return
         c.execute('UPDATE geofence SET radius_m = ? WHERE 1=1', (meters,))
-        conn.commit()
-        print(f'Updated geofence radius to {meters} meters for {count} row(s).')
-    except Exception as e:
+        """
+        set_geofence_radius.py: removed. Geofence feature disabled.
+        """
         print('Error updating geofence:', e)
-    finally:
-        conn.close()
-
-if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print('Usage: python set_geofence_radius.py <meters>')
-        sys.exit(1)
-    try:
-        meters = int(sys.argv[1])
-    except ValueError:
-        print('meters must be an integer')
-        sys.exit(1)
-    set_radius(meters)

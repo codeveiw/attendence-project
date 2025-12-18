@@ -13,6 +13,15 @@ app = Flask(__name__, static_folder='../frontend', static_url_path='')
 CORS(app)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
 
+# secret for session OTP generation (change in production)
+app.config['SESSION_OTP_SECRET'] = 'change-this-session-secret-in-prod'
+SESSION_OTP_WINDOW = 30  # seconds per OTP window
+
+# Simple haversine distance (meters) used for attendance geofence checks (legacy)
+PROXIMITY_THRESHOLD_M = 8
+# When True, require device binding for attendance/login flows
+ENFORCE_DEVICE_BINDING = True
+
 
 # إنشاء قاعدة البيانات
 def init_db():
@@ -168,7 +177,8 @@ def login():
     data = request.json
     username = data.get('username')
     password = data.get('password')
-    device_id = data.get('device_id')
+    # Prefer X-Device-Id header; fall back to JSON body for legacy clients
+    device_id = request.headers.get('X-Device-Id') or data.get('device_id')
     user_lat = data.get('lat')
     user_lng = data.get('lng')
     
@@ -228,6 +238,11 @@ def login():
             # On DB error, be conservative and deny access
             conn.close()
             return jsonify({'error': 'خطأ بالخادم أثناء التحقق من الجهاز'}), 500
+
+    # If device binding enforcement is enabled, require device_id to be present on login
+    if ENFORCE_DEVICE_BINDING and not device_id:
+        conn.close()
+        return jsonify({'error': 'مطلوب معرف الجهاز (X-Device-Id) لتسجيل الدخول من هذا الجهاز'}), 400
 
     conn.close()
     token = jwt.encode({
@@ -778,6 +793,36 @@ def get_active_sessions(current_user):
         } for s in sessions]
     })
 
+
+# حذف جلسة (للأستاذ المالك للجلسة)
+@app.route('/api/sessions/<int:session_id>', methods=['DELETE'])
+@token_required
+def professor_delete_session(current_user, session_id):
+    # only professors can delete their own sessions
+    if current_user['role'] != 'professor':
+        return jsonify({'error': 'غير مصرح لك'}), 403
+
+    conn = sqlite3.connect('attendance.db')
+    c = conn.cursor()
+    # check ownership
+    c.execute('SELECT professor_id FROM sessions WHERE id=?', (session_id,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        return jsonify({'error': 'الجلسة غير موجودة'}), 404
+
+    if row[0] != current_user['user_id']:
+        conn.close()
+        return jsonify({'error': 'ليس لديك صلاحية حذف هذه الجلسة'}), 403
+
+    # delete attendance records then the session
+    c.execute('DELETE FROM attendance WHERE session_id=?', (session_id,))
+    c.execute('DELETE FROM sessions WHERE id=?', (session_id,))
+    conn.commit()
+    conn.close()
+
+    return jsonify({'message': 'تم حذف الجلسة بنجاح'})
+
 # الحصول على حضور الطلاب لجلسة معينة
 @app.route('/api/sessions/<int:session_id>/attendance', methods=['GET'])
 @token_required
@@ -998,6 +1043,3 @@ def index():
 if __name__ == '__main__':
     # app.run(debug=True, port=5000)
     app.run(debug=True, host="0.0.0.0", port=5000)
-
-
-
